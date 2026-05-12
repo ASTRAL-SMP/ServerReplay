@@ -1,6 +1,7 @@
 package me.senseiwells.replay.rejoin
 
 import me.senseiwells.replay.ServerReplay
+import me.senseiwells.replay.chunk.ChunkRecorder
 import net.minecraft.network.Connection
 import net.minecraft.network.PacketSendListener
 import net.minecraft.network.protocol.Packet
@@ -17,7 +18,12 @@ class RejoinGamePacketListener(
 
     override fun send(packet: Packet<*>, listener: PacketSendListener?) {
         try {
-            this.replay.recorder.record(packet)
+            val recorder = this.replay.recorder
+            if (recorder is ChunkRecorder) {
+                recorder.record(packet, true)
+            } else {
+                recorder.record(packet)
+            }
         } catch (e: Exception) {
             ServerReplay.logger.error(
                 "Failed to record rejoin packet {} for {}",

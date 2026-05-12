@@ -58,7 +58,7 @@ public abstract class ServerLevelMixin extends Level {
 
 		 ChunkPos chunkPos = new ChunkPos(pos);
 		 for (ChunkRecorder recorder : ChunkRecorders.containing(this.dimension(), chunkPos)) {
-			 recorder.record(new ClientboundBlockDestructionPacket(breakerId, pos, progress));
+			 recorder.record(new ClientboundBlockDestructionPacket(breakerId, pos, progress), true);
 		 }
 	}
 
@@ -86,7 +86,7 @@ public abstract class ServerLevelMixin extends Level {
 				explosion.getToBlow(),
 				// Knock-back
 				Vec3.ZERO
-			));
+			), true);
 		}
 	}
 
@@ -109,7 +109,7 @@ public abstract class ServerLevelMixin extends Level {
 	) {
 		ChunkPos chunkPos = new ChunkPos(BlockPos.containing(posX, posY, posZ));
 		for (ChunkRecorder recorder : ChunkRecorders.containing(this.dimension(), chunkPos)) {
-			recorder.record(packet);
+			recorder.record(packet, true);
 		}
 	}
 }

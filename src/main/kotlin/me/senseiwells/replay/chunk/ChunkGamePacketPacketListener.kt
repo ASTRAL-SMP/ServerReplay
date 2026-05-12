@@ -15,6 +15,6 @@ class ChunkGamePacketPacketListener(
     player
 ) {
     override fun send(packet: Packet<*>, listener: PacketSendListener?) {
-        this.recorder.record(packet)
+        this.recorder.record(packet, true)
     }
 }

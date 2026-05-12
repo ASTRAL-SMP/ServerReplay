@@ -27,6 +27,7 @@ import kotlin.io.path.exists
 import kotlin.io.path.inputStream
 import kotlin.io.path.outputStream
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 
 @Serializable
 @OptIn(ExperimentalSerializationApi::class)
@@ -67,6 +68,11 @@ data class ReplayConfig(
     var chunkRecorderLoadRadius: Int = -1,
     @SerialName("pause_unloaded_chunks")
     var skipWhenChunksUnloaded: Boolean = false,
+    @SerialName("pause_inactive_chunks")
+    var skipWhenChunksInactive: Boolean = false,
+    @SerialName("chunk_inactivity_timeout")
+    @Serializable(with = DurationSerializer::class)
+    var chunkInactivityTimeout: Duration = 10.seconds,
     @SerialName("pause_notify_players")
     var notifyPlayersLoadingChunks: Boolean = true,
     @SerialName("notify_admins_of_status")

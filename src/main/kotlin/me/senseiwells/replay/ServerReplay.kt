@@ -1,6 +1,7 @@
 package me.senseiwells.replay
 
 import me.senseiwells.replay.api.ServerReplayPluginManager
+import me.senseiwells.replay.chunk.ChunkRecorders
 import me.senseiwells.replay.commands.PackCommand
 import me.senseiwells.replay.commands.ReplayCommand
 import me.senseiwells.replay.config.ReplayConfig
@@ -10,6 +11,7 @@ import net.casual.arcade.host.pack.ReadablePack
 import net.fabricmc.api.ModInitializer
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents
 import net.fabricmc.loader.api.FabricLoader
 import net.fabricmc.loader.api.ModContainer
 import org.slf4j.Logger
@@ -42,6 +44,9 @@ object ServerReplay: ModInitializer {
         ServerLifecycleEvents.SERVER_STOPPING.register {
             this.downloads?.stop()
             this.packs?.stop()
+        }
+        ServerTickEvents.END_SERVER_TICK.register {
+            ChunkRecorders.tick()
         }
 
         CommandRegistrationCallback.EVENT.register { dispatcher, _, _ ->

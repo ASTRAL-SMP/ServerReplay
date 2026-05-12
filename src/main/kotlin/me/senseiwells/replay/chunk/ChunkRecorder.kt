@@ -32,9 +32,11 @@ import net.minecraft.world.phys.Vec3
 import org.apache.commons.lang3.builder.ToStringBuilder
 import org.jetbrains.annotations.ApiStatus.Internal
 import java.nio.file.Path
+import java.util.EnumSet
 import java.util.concurrent.CompletableFuture
 import java.util.function.Consumer
 import kotlin.io.path.nameWithoutExtension
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * An implementation of [ReplayRecorder] for recording chunk areas.
@@ -64,7 +66,9 @@ class ChunkRecorder internal constructor(
     private val recordables = HashSet<ChunkRecordable>()
 
     private var totalPausedTime: Long = 0
-    private var lastPaused: Long = 0
+    private var pausedAt: Long = 0
+    private val pauseReasons = EnumSet.noneOf(PauseReason::class.java)
+    private var lastActivity: Long = System.currentTimeMillis()
 
     /**
      * The level that the chunk recording is currently in.
@@ -194,6 +198,9 @@ class ChunkRecorder internal constructor(
         builder.append("chunks_world", this.chunks.level.dimension().location())
         builder.append("chunks_from", this.chunks.from)
         builder.append("chunks_to", this.chunks.to)
+        if (this.paused()) {
+            builder.append("paused", this.pauseReasons.joinToString { it.id })
+        }
     }
 
     /**
@@ -255,7 +262,22 @@ class ChunkRecorder internal constructor(
      * @param packet The packet to be recorded.
      */
     override fun sendPacket(packet: Packet<*>) {
-        this.record(packet)
+        this.record(packet, true)
+    }
+
+    /**
+     * Records a packet, optionally treating it as activity in this chunk area.
+     *
+     * Ambient packets, such as global chat, should not resume an inactive chunk
+     * recording or keep it alive. Packets caused by local chunk updates should.
+     */
+    fun record(packet: Packet<*>, activity: Boolean) {
+        if (activity) {
+            this.markActive()
+        } else if (this.isInactive()) {
+            return
+        }
+        super.record(packet)
     }
 
     /**
@@ -288,6 +310,9 @@ class ChunkRecorder internal constructor(
      * @return Whether this recorded should record it.
      */
     override fun canRecordPacket(packet: Packet<*>): Boolean {
+        if (this.isInactive()) {
+            return false
+        }
         // If the server view-distance changes we do not want to update
         // the client - this will cut the view distance in the replay
         if (packet is ClientboundSetChunkCacheRadiusPacket) {
@@ -306,6 +331,32 @@ class ChunkRecorder internal constructor(
      */
     fun getDummyPlayer(): ServerPlayer {
         return this.dummy
+    }
+
+    @Internal
+    fun tick() {
+        if (!ServerReplay.config.skipWhenChunksInactive) {
+            this.removePause(PauseReason.Inactive)
+            this.lastActivity = System.currentTimeMillis()
+            return
+        }
+
+        if (this.hasPlayerInArea()) {
+            this.markActive()
+            return
+        }
+
+        val now = System.currentTimeMillis()
+        val timeout = ServerReplay.config.chunkInactivityTimeout
+        if (!timeout.isPositive()) {
+            this.addPause(PauseReason.Inactive, now)
+            return
+        }
+
+        val inactiveFor = now - this.lastActivity
+        if (inactiveFor.milliseconds >= timeout) {
+            this.addPause(PauseReason.Inactive, this.lastActivity + timeout.inWholeMilliseconds)
+        }
     }
 
     @Internal
@@ -341,7 +392,8 @@ class ChunkRecorder internal constructor(
             return
         }
 
-        this.resume()
+        this.removePause(PauseReason.Unloaded)
+        this.markActive()
         this.loadedChunks.add(chunk.pos.toLong())
 
         if (!this.sentChunks.contains(chunk.pos.toLong())) {
@@ -359,58 +411,104 @@ class ChunkRecorder internal constructor(
         this.loadedChunks.remove(pos.toLong())
 
         if (this.loadedChunks.isEmpty()) {
-            this.pause()
+            this.addPause(PauseReason.Unloaded)
         }
     }
 
     private fun spawnPlayer() {
-        this.record(ClientboundAddPlayerPacket(this.dummy))
+        this.record(ClientboundAddPlayerPacket(this.dummy), true)
         val tracked = this.dummy.entityData.nonDefaultValues
         if (tracked != null) {
-            this.record(ClientboundSetEntityDataPacket(this.dummy.id, tracked))
-        }
-    }
-
-    private fun pause() {
-        if (!this.paused() && ServerReplay.config.skipWhenChunksUnloaded) {
-            this.lastPaused = System.currentTimeMillis()
-
-            if (ServerReplay.config.notifyPlayersLoadingChunks) {
-                this.ignore {
-                    this.server.playerList.broadcastSystemMessage(
-                        Component.literal("Paused recording for ${this.getName()}, chunks were unloaded"),
-                        false
-                    )
-                }
-            }
-        }
-    }
-
-    private fun resume() {
-        if (this.paused()) {
-            this.totalPausedTime += this.getCurrentPause()
-            this.lastPaused = 0L
-
-            if (ServerReplay.config.notifyPlayersLoadingChunks) {
-                this.ignore {
-                    this.server.playerList.broadcastSystemMessage(
-                        Component.literal("Resumed recording for ${this.getName()}, chunks were loaded"),
-                        false
-                    )
-                }
-            }
+            this.record(ClientboundSetEntityDataPacket(this.dummy.id, tracked), true)
         }
     }
 
     private fun getCurrentPause(): Long {
         if (this.paused()) {
-            return System.currentTimeMillis() - this.lastPaused
+            return System.currentTimeMillis() - this.pausedAt
         }
         return 0L
     }
 
     private fun paused(): Boolean {
-        return this.lastPaused != 0L
+        return this.pausedAt != 0L
+    }
+
+    private fun isInactive(): Boolean {
+        return this.pauseReasons.contains(PauseReason.Inactive)
+    }
+
+    private fun markActive() {
+        this.removePause(PauseReason.Inactive)
+        this.lastActivity = System.currentTimeMillis()
+    }
+
+    private fun addPause(reason: PauseReason, since: Long = System.currentTimeMillis()) {
+        if (reason == PauseReason.Unloaded && !ServerReplay.config.skipWhenChunksUnloaded) {
+            return
+        }
+        if (reason == PauseReason.Inactive && !ServerReplay.config.skipWhenChunksInactive) {
+            return
+        }
+        if (this.pauseReasons.add(reason) && this.pauseReasons.size == 1) {
+            this.pausedAt = since
+            this.notifyPaused(reason)
+        }
+    }
+
+    private fun removePause(reason: PauseReason) {
+        if (this.pauseReasons.remove(reason) && this.pauseReasons.isEmpty()) {
+            this.totalPausedTime += this.getCurrentPause()
+            this.pausedAt = 0L
+            this.notifyResumed(reason)
+        }
+    }
+
+    private fun hasPlayerInArea(): Boolean {
+        for (player in this.server.playerList.players) {
+            if (player == this.dummy) {
+                continue
+            }
+            if (this.chunks.contains(player.level.dimension(), player.chunkPosition())) {
+                return true
+            }
+        }
+        return false
+    }
+
+    private fun notifyPaused(reason: PauseReason) {
+        if (ServerReplay.config.notifyPlayersLoadingChunks) {
+            val detail = when (reason) {
+                PauseReason.Unloaded -> "chunks were unloaded"
+                PauseReason.Inactive -> "chunks were inactive"
+            }
+            this.ignore {
+                this.server.playerList.broadcastSystemMessage(
+                    Component.literal("Paused recording for ${this.getName()}, $detail"),
+                    false
+                )
+            }
+        }
+    }
+
+    private fun notifyResumed(reason: PauseReason) {
+        if (ServerReplay.config.notifyPlayersLoadingChunks) {
+            val detail = when (reason) {
+                PauseReason.Unloaded -> "chunks were loaded"
+                PauseReason.Inactive -> "activity resumed"
+            }
+            this.ignore {
+                this.server.playerList.broadcastSystemMessage(
+                    Component.literal("Resumed recording for ${this.getName()}, $detail"),
+                    false
+                )
+            }
+        }
+    }
+
+    private enum class PauseReason(val id: String) {
+        Unloaded("unloaded"),
+        Inactive("inactive")
     }
 
     companion object {

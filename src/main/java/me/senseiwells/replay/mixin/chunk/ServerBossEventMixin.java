@@ -43,7 +43,7 @@ public abstract class ServerBossEventMixin extends BossEvent implements ChunkRec
 		@Local ClientboundBossEventPacket packet
 	) {
 		for (ChunkRecorder recorder : this.replay$recorders) {
-			recorder.record(packet);
+			recorder.record(packet, true);
 		}
 	}
 
@@ -67,7 +67,7 @@ public abstract class ServerBossEventMixin extends BossEvent implements ChunkRec
 			ClientboundBossEventPacket.createAddPacket(this) :
 			ClientboundBossEventPacket.createRemovePacket(this.getId());
 		for (ChunkRecorder recorder : this.replay$recorders) {
-			recorder.record(packet);
+			recorder.record(packet, true);
 		}
 	}
 
@@ -80,7 +80,7 @@ public abstract class ServerBossEventMixin extends BossEvent implements ChunkRec
 	@Override
 	public void replay$addRecorder(ChunkRecorder recorder) {
 		if (this.replay$recorders.add(recorder) && this.visible) {
-			recorder.record(ClientboundBossEventPacket.createAddPacket(this));
+			recorder.record(ClientboundBossEventPacket.createAddPacket(this), true);
 			recorder.addRecordable(this);
 		}
 	}
@@ -88,7 +88,7 @@ public abstract class ServerBossEventMixin extends BossEvent implements ChunkRec
 	@Override
 	public void replay$removeRecorder(ChunkRecorder recorder) {
 		if (this.replay$recorders.remove(recorder) && this.visible) {
-			recorder.record(ClientboundBossEventPacket.createRemovePacket(this.getId()));
+			recorder.record(ClientboundBossEventPacket.createRemovePacket(this.getId()), true);
 			recorder.removeRecordable(this);
 		}
 	}
@@ -98,7 +98,7 @@ public abstract class ServerBossEventMixin extends BossEvent implements ChunkRec
 		if (this.visible) {
 			ClientboundBossEventPacket packet = ClientboundBossEventPacket.createRemovePacket(this.getId());
 			for (ChunkRecorder recorder : this.replay$recorders) {
-				recorder.record(packet);
+				recorder.record(packet, true);
 			}
 		}
 		for (ChunkRecorder recorder : this.replay$recorders) {

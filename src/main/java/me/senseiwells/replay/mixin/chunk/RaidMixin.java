@@ -64,7 +64,7 @@ public class RaidMixin {
 				seed
 			);
 			for (ChunkRecorder recorder : recorders) {
-				recorder.record(packet);
+				recorder.record(packet, true);
 			}
 		}
 	}

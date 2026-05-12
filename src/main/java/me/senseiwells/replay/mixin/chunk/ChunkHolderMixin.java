@@ -41,7 +41,7 @@ public abstract class ChunkHolderMixin implements ChunkRecordable {
 	)
 	private void onBroadcast(Packet<?> packet, boolean boundaryOnly, CallbackInfo ci) {
 		for (ChunkRecorder recorder : this.replay$recorders) {
-			recorder.record(packet);
+			recorder.record(packet, true);
 		}
 	}
 

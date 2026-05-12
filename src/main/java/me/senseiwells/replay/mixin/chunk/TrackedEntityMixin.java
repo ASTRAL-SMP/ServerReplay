@@ -37,7 +37,7 @@ public class TrackedEntityMixin implements ChunkRecordable {
 	)
 	private void onBroadcast(Packet<?> packet, CallbackInfo ci) {
 		for (ChunkRecorder recorder : this.replay$chunks) {
-			recorder.record(packet);
+			recorder.record(packet, true);
 		}
 	}
 
@@ -70,7 +70,7 @@ public class TrackedEntityMixin implements ChunkRecordable {
 			recorder.addRecordable(this);
 			List<Packet<ClientGamePacketListener>> list = new ArrayList<>();
 			this.serverEntity.sendPairingData(list::add);
-			recorder.record(new ClientboundBundlePacket(list));
+			recorder.record(new ClientboundBundlePacket(list), true);
 
 			recorder.onEntityTracked(this.entity);
 		}
@@ -83,7 +83,7 @@ public class TrackedEntityMixin implements ChunkRecordable {
 
 			recorder.record(new ClientboundRemoveEntitiesPacket(
 				this.entity.getId()
-			));
+			), true);
 			recorder.removeRecordable(this);
 		}
 	}
@@ -94,7 +94,7 @@ public class TrackedEntityMixin implements ChunkRecordable {
 		for (ChunkRecorder recorder : this.replay$chunks) {
 			recorder.onEntityUntracked(this.entity);
 
-			recorder.record(packet);
+			recorder.record(packet, true);
 			recorder.removeRecordable(this);
 		}
 		this.replay$chunks.clear();

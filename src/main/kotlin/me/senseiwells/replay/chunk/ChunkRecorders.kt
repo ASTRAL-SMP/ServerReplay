@@ -153,6 +153,16 @@ object ChunkRecorders {
     }
 
     /**
+     * Updates all active chunk recorders.
+     */
+    @JvmStatic
+    fun tick() {
+        for (recorder in this.recorders()) {
+            recorder.tick()
+        }
+    }
+
+    /**
      * Gets a collection of all the currently closing chunk recorders.
      *
      * @return A collection of all the closing chunk recorders.

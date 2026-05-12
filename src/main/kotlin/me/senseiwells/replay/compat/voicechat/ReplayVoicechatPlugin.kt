@@ -155,7 +155,7 @@ object ReplayVoicechatPlugin: VoicechatPlugin, ServerReplayPlugin {
                 val dimension = player.level.dimension()
                 val chunkPos = player.chunkPosition()
                 for (recorder in ChunkRecorders.containing(dimension, chunkPos)) {
-                    recorder.record(lazyEntityPacket.value)
+                    recorder.record(lazyEntityPacket.value, true)
                 }
             }
         }
